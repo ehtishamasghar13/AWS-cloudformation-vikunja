@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ALB with Path-Based Routing and Target Groups for ECS Services
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where the ALB and ECS Services are deployed
+
+  PublicSubnetList:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of Public Subnet IDs for the ALB
+
+  ECSFrontendServiceName:
+    Type: String
+    Description: Name of the ECS Frontend Service
+
+  ECSBackendServiceName:
+    Type: String
+    Description: Name of the ECS Backend Service
+
+Resources:
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for ALB
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: MyApplicationLoadBalancer
+      Subnets: !Ref PublicSubnetList
+      Scheme: internet-facing
+      Type: application
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+
+  FrontendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: FrontendTargetGroup
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: BackendTargetGroup
+      Port: 3456
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: 200
+            ContentType: text/plain
+            MessageBody: "No route found"
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  FrontendListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref FrontendTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values: ["/frontend/*"]
+      ListenerArn: !Ref Listener
+      Priority: 1
+
+  BackendListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values: ["/backend/*"]
+      ListenerArn: !Ref Listener
+      Priority: 2
+
+Outputs:
+  LoadBalancerDNSName:
+    Description: DNS Name of the Application Load Balancer
+    Value: !GetAtt LoadBalancer.DNSName
+  FrontendTargetGroupArn:
+    Description: ARN of the Frontend Target Group
+    Value: !Ref FrontendTargetGroup
+  BackendTargetGroupArn:
+    Description: ARN of the Backend Target Group
+    Value: !Ref BackendTargetGroup

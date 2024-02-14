@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECS Cluster and Services with IAM Roles
+
+Parameters:
+  FrontendTaskDefinitionArn:
+    Type: String
+    Description: ARN of the Frontend Task Definition
+
+  BackendTaskDefinitionArn:
+    Type: String
+    Description: ARN of the Backend Task Definition
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where ECS Services will be deployed
+
+  SubnetList:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of Subnet IDs for the ECS Service
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security Group ID for the ECS Service
+
+Resources:
+  ECSServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs.amazonaws.com
+            Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: ECSServicePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:*
+                  - elasticloadbalancing:*
+                  - ec2:*
+                  - cloudwatch:*
+                  - logs:*
+                Resource: "*"
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: ECSTaskExecutionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: MyEcsCluster
+
+  FrontendService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: frontend-service
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !Ref FrontendTaskDefinitionArn
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: !Ref SubnetList
+          SecurityGroups:
+            - !Ref SecurityGroup
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+
+  BackendService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: backend-service
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !Ref BackendTaskDefinitionArn
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: !Ref SubnetList
+          SecurityGroups:
+            - !Ref SecurityGroup
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+
+Outputs:
+  EcsClusterName:
+    Description: The name of the ECS cluster
+    Value: !Ref EcsCluster
+
+  FrontendServiceName:
+    Description: The name of the Frontend ECS service
+    Value: !Ref FrontendService
+
+  BackendServiceName:
+    Description: The name of the Backend ECS service
+    Value: !Ref BackendService

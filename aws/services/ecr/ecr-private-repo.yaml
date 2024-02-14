@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS CloudFormation Template to create two private ECR repositories
+
+Resources:
+  MyFirstECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: vikunja-api-repo
+      RepositoryPolicyText:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowPushPull
+            Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::834556661000:user/ehtisham
+            Action:
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+              - ecr:BatchCheckLayerAvailability
+              - ecr:PutImage
+              - ecr:InitiateLayerUpload
+              - ecr:UploadLayerPart
+              - ecr:CompleteLayerUpload
+              - ecr:DescribeRepositories
+              - ecr:GetRepositoryPolicy
+              - ecr:ListImages
+              - ecr:DeleteRepository
+              - ecr:UpdateRepositoryName
+              - ecr:SetRepositoryPolicy
+              - ecr:DeleteRepositoryPolicy
+
+  MySecondECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: vikunja-frontend-repo
+
+Outputs:
+  FirstRepositoryURI:
+    Description: "URI of the first ECR repository"
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${MyFirstECRRepository}"
+
+  FirstRepositoryARN:
+    Description: "ARN of the first ECR repository"
+    Value: !GetAtt MyFirstECRRepository.Arn
+
+  SecondRepositoryURI:
+    Description: "URI of the second ECR repository"
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${MySecondECRRepository}"
+
+  SecondRepositoryARN:
+    Description: "ARN of the second ECR repository"
+    Value: !GetAtt MySecondECRRepository.Arn

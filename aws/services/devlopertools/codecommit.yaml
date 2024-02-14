@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation Template to create CodeCommit Repositories
+
+Resources:
+  FrontendRepository:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryName: vikunja-frontend
+      RepositoryDescription: "Vikunja Repository for frontend code"
+
+  BackendRepository:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryName: vikunja-api
+      RepositoryDescription: "Vikunja Repository for backend code"
+
+Outputs:
+  FrontendRepositoryCloneUrlHttp:
+    Description: "Clone URL (HTTP) of the frontend repository"
+    Value: !GetAtt FrontendRepository.CloneUrlHttp
+
+  BackendRepositoryCloneUrlHttp:
+    Description: "Clone URL (HTTP) of the backend repository"
+    Value: !GetAtt BackendRepository.CloneUrlHttp

@@ -1,0 +1,174 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CodePipeline for building and pushing Docker images to ECR'
+
+Parameters:
+  CodeCommitRepoName:
+    Type: String
+    Description: Name of the AWS CodeCommit repository
+
+  ECRRepoUri:
+    Type: String
+    Description: URI of the AWS ECR repository
+
+Resources:
+  ArtifactStoreBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+
+  ArtifactStoreBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref ArtifactStoreBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowPipelineAndCodeBuildAccess'
+            Effect: 'Allow'
+            Principal:
+              AWS: !GetAtt CodeBuildServiceRole.Arn
+            Action:
+              - 's3:GetObject'
+              - 's3:GetObjectVersion'
+              - 's3:GetBucketVersioning'
+              - 's3:PutObject'
+            Resource:
+              - !Sub 'arn:aws:s3:::${ArtifactStoreBucket}/*'
+              - !Sub 'arn:aws:s3:::${ArtifactStoreBucket}'
+
+  CodeBuildProject:
+    Type: 'AWS::CodeBuild::Project'
+    Properties:
+      Name: !Sub '${AWS::StackName}-DockerBuild'
+      Artifacts:
+        Type: 'CODEPIPELINE'
+      Environment:
+        Type: 'LINUX_CONTAINER'
+        ComputeType: 'BUILD_GENERAL1_SMALL'
+        Image: 'aws/codebuild/standard:4.0'
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: 'REPOSITORY_URI'
+            Value: !Ref ECRRepoUri
+      Source:
+        Type: 'CODEPIPELINE'
+        BuildSpec: 'buildspec.yml'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+
+  CodeBuildServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'codebuild.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'CodeBuildAccess'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'logs:*'
+                  - 'ecr:GetAuthorizationToken'
+                  - 'ecr:BatchCheckLayerAvailability'
+                  - 'ecr:CompleteLayerUpload'
+                  - 'ecr:InitiateLayerUpload'
+                  - 'ecr:PutImage'
+                  - 'ecr:UploadLayerPart'
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:DeleteObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ArtifactStoreBucket}'
+                  - !Sub 'arn:aws:s3:::${ArtifactStoreBucket}/*'
+
+  CodePipelineRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'codepipeline.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'CodePipelineAccess'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'codecommit:GetBranch'
+                  - 'codecommit:GetCommit'
+                  - 'codecommit:UploadArchive'
+                  - 'codecommit:GetUploadArchiveStatus'
+                  - 'codecommit:CancelUploadArchive'
+                  - 's3:GetObject'
+                  - 's3:GetObjectVersion'
+                  - 's3:GetBucketVersioning'
+                  - 's3:PutObject'
+                  - 'codebuild:StartBuild'
+                  - 'codebuild:BatchGetBuilds'
+                  - 'ecr:GetDownloadUrlForLayer'
+                  - 'ecr:GetRepositoryPolicy'
+                  - 'ecr:DescribeRepositories'
+                  - 'ecr:ListImages'
+                  - 'ecr:PutImage'
+                Resource: '*'
+
+  Pipeline:
+    Type: 'AWS::CodePipeline::Pipeline'
+    Properties:
+      Name: !Sub '${AWS::StackName}-Pipeline'
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: 'S3'
+        Location: !Ref ArtifactStoreBucket
+      Stages:
+        - Name: 'Source'
+          Actions:
+            - Name: 'Source'
+              ActionTypeId:
+                Category: 'Source'
+                Owner: 'AWS'
+                Version: '1'
+                Provider: 'CodeCommit'
+              OutputArtifacts:
+                - Name: 'SourceOutput'
+              Configuration:
+                RepositoryName: !Ref CodeCommitRepoName
+                BranchName: 'master'
+              RunOrder: 1
+        - Name: 'Build'
+          Actions:
+            - Name: 'Build'
+              ActionTypeId:
+                Category: 'Build'
+                Owner: 'AWS'
+                Version: '1'
+                Provider: 'CodeBuild'
+              InputArtifacts:
+                - Name: 'SourceOutput'
+              OutputArtifacts:
+                - Name: 'BuildOutput'
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              RunOrder: 1
+
+Outputs:
+  PipelineName:
+    Description: 'CodePipeline name'
+    Value: !Ref Pipeline
+  ArtifactStoreBucketName:
+    Description: 'S3 Bucket for Artifacts'
+    Value: !Ref ArtifactStoreBucket

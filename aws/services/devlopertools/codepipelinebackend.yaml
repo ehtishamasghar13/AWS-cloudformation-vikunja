@@ -10,6 +10,25 @@ Parameters:
     Type: String
     Description: URI of the AWS ECR repository
 
+  EcsClusterName:
+    Type: String
+    Description: Name of the ECS Cluster
+
+  BackendServiceName:
+    Type: String
+    Description: Name of the ECS Service
+
+  ALBListenerArn:
+    Type: String
+    Description: ARN of the ALB Listener
+
+  ProdTargetGroupArn:
+    Type: String
+    Description: ARN of the Production Target Group
+
+  TestTargetGroupArn:
+    Type: String
+    Description: ARN of the Test Target Group
 Resources:
   ArtifactStoreBucket:
     Type: 'AWS::S3::Bucket'
@@ -126,6 +145,34 @@ Resources:
                   - 'ecr:PutImage'
                 Resource: '*'
 
+  CodeDeployDeploymentGroup:
+    Type: 'AWS::CodeDeploy::DeploymentGroup'
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      DeploymentGroupName: !Sub '${AWS::StackName}-DeploymentGroup'
+      DeploymentConfigName: 'CodeDeployDefault.ECSAllAtOnce'
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      DeploymentStyle:
+        DeploymentType: 'BLUE_GREEN'
+        DeploymentOption: 'WITH_TRAFFIC_CONTROL'
+      BlueGreenDeploymentConfiguration:
+          TerminateBlueInstancesOnDeploymentSuccess:
+          Action: 'TERMINATE'
+          TerminationWaitTimeInMinutes: 5
+        DeploymentReadyOption:
+          ActionOnTimeout: 'CONTINUE_DEPLOYMENT'
+      ECSAttributes:
+        TaskDefinition: !Ref FrontendTaskDefinitionArn
+        TaskSetTerminationTimeMinutes: 5
+      LoadBalancerInfo:
+        TargetGroupPairInfoList:
+          - ProdTrafficRoute:
+              ListenerArns:
+                - !Ref ALBListenerArn
+            TargetGroups:
+              - Name: !Ref ProdTargetGroupArn
+              - Name: !Ref TestTargetGroupArn
+
   Pipeline:
     Type: 'AWS::CodePipeline::Pipeline'
     Properties:
@@ -164,6 +211,9 @@ Resources:
               Configuration:
                 ProjectName: !Ref CodeBuildProject
               RunOrder: 1
+
+
+
 
 Outputs:
   PipelineName:

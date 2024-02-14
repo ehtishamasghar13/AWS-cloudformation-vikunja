@@ -22,6 +22,14 @@ Parameters:
     Type: AWS::EC2::SecurityGroup::Id
     Description: Security Group ID for the ECS Service
 
+  FrontendTargetGroupArn:
+    Type: String
+    Description: ARN of the Target Group for the Frontend Service
+
+  BackendTargetGroupArn:
+    Type: String
+    Description: ARN of the Target Group for the Backend Service
+
 Resources:
   ECSServiceRole:
     Type: AWS::IAM::Role
@@ -87,6 +95,10 @@ Resources:
       TaskDefinition: !Ref FrontendTaskDefinitionArn
       DesiredCount: 1
       LaunchType: FARGATE
+      LoadBalancers:
+        - ContainerName: "frontend-container" 
+          ContainerPort: 80 
+          TargetGroupArn: !Ref FrontendTargetGroupArn
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets: !Ref SubnetList
@@ -104,6 +116,10 @@ Resources:
       TaskDefinition: !Ref BackendTaskDefinitionArn
       DesiredCount: 1
       LaunchType: FARGATE
+      LoadBalancers:
+        - ContainerName: "backend-container" 
+          ContainerPort: 3456 
+          TargetGroupArn: !Ref BackendTargetGroupArn
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets: !Ref SubnetList

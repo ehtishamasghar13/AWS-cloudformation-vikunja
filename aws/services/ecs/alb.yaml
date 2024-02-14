@@ -1,28 +1,24 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: ALB with Path-Based Routing and Target Groups for ECS Services
+Description: CloudFormation template to create ALB, Target Group, and Security Group
 
 Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
-    Description: VPC ID where the ALB and ECS Services are deployed
+    Description: VPC ID where ALB and Target Group will be deployed
 
-  PublicSubnetList:
-    Type: List<AWS::EC2::Subnet::Id>
-    Description: List of Public Subnet IDs for the ALB
+  SubnetA:
+    Type: AWS::EC2::Subnet::Id
+    Description: First Subnet ID for the ALB, must be in a unique Availability Zone
 
-  ECSFrontendServiceName:
-    Type: String
-    Description: Name of the ECS Frontend Service
-
-  ECSBackendServiceName:
-    Type: String
-    Description: Name of the ECS Backend Service
+  SubnetB:
+    Type: AWS::EC2::Subnet::Id
+    Description: Second Subnet ID for the ALB, must be in a different Availability Zone than SubnetA
 
 Resources:
   ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security Group for ALB
+      GroupDescription: Security Group for the ALB
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -30,76 +26,40 @@ Resources:
           ToPort: 80
           CidrIp: 0.0.0.0/0
 
-  LoadBalancer:
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: 80
+      TargetType: ip
+
+  ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Name: MyApplicationLoadBalancer
-      Subnets: !Ref PublicSubnetList
-      Scheme: internet-facing
-      Type: application
+      Subnets:
+        - !Ref SubnetA
+        - !Ref SubnetB
       SecurityGroups:
         - !Ref ALBSecurityGroup
+      Scheme: internet-facing
+      Type: application
 
-  FrontendTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: FrontendTargetGroup
-      Port: 80
-      Protocol: HTTP
-      VpcId: !Ref VpcId
-
-  BackendTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: BackendTargetGroup
-      Port: 3456
-      Protocol: HTTP
-      VpcId: !Ref VpcId
-
-  Listener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - Type: fixed-response
-          FixedResponseConfig:
-            StatusCode: 200
-            ContentType: text/plain
-            MessageBody: "No route found"
-      LoadBalancerArn: !Ref LoadBalancer
-      Port: 80
-      Protocol: HTTP
-
-  FrontendListenerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      Actions:
-        - Type: forward
-          TargetGroupArn: !Ref FrontendTargetGroup
-      Conditions:
-        - Field: path-pattern
-          Values: ["/frontend/*"]
-      ListenerArn: !Ref Listener
-      Priority: 1
-
-  BackendListenerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      Actions:
-        - Type: forward
-          TargetGroupArn: !Ref BackendTargetGroup
-      Conditions:
-        - Field: path-pattern
-          Values: ["/backend/*"]
-      ListenerArn: !Ref Listener
-      Priority: 2
 
 Outputs:
-  LoadBalancerDNSName:
+  ALBSecurityGroupId:
+    Description: Security Group ID of the Application Load Balancer
+    Value: !Ref ALBSecurityGroup
+
+  ALBTargetGroupArn:
+    Description: ARN of the Target Group for the ALB
+    Value: !Ref ALBTargetGroup
+
+  ApplicationLoadBalancerArn:
+    Description: ARN of the Application Load Balancer
+    Value: !Ref ApplicationLoadBalancer
+
+  ApplicationLoadBalancerDNSName:
     Description: DNS Name of the Application Load Balancer
-    Value: !GetAtt LoadBalancer.DNSName
-  FrontendTargetGroupArn:
-    Description: ARN of the Frontend Target Group
-    Value: !Ref FrontendTargetGroup
-  BackendTargetGroupArn:
-    Description: ARN of the Backend Target Group
-    Value: !Ref BackendTargetGroup
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
